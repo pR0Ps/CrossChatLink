@@ -76,21 +76,21 @@ class CrossChatLink(threading.Thread):
     
     def __init__(self):
         super(CrossChatLink, self).__init__()
-        self._stopReq = threading.Event()
+        self._stop_req = threading.Event()
         
         logging.info ("Starting " + VERSION)
 
         #stores commands to process
-        self._commandQueue = queue.Queue()
+        self._command_queue = queue.Queue()
 
         #create the telnet thread
-        self.adminInterface = interface.Admin(self)
-        self.adminInterface.start()
+        self.admin_interface = interface.Admin(self)
+        self.admin_interface.start()
 
         #create the initial connection dict
         self.connections = dict()
 
-    def loadConfig(self):
+    def load_config(self):
         """Loads the configuration file and sets up the links"""
         logging.debug("Loading configuration data")
         #TODO: load XML file with settings in it
@@ -101,24 +101,24 @@ class CrossChatLink(threading.Thread):
         self.connections["nmdc"] = links.NMDC(self, "127.0.0.1:443", "Nick", "aPass", "[NMDC]")
         self.connections["adc"] = links.ADC(self, "127.0.0.1:443", "Nick", "aPass", "[ADC]")
         self.connections["irc"] = links.IRC(self, "127.0.0.1:6667", "Nick", "aPass", "[IRC]")
-        self.connections["nmdc"].addLinks("nmdc", ["adc", "irc"])
-        self.connections["adc"].addLinks("adc", ["irc"])
-        self.connections["irc"].addLinks("irc", ["nmdc"])
+        self.connections["nmdc"].add_links("nmdc", ["adc", "irc"])
+        self.connections["adc"].add_links("adc", ["irc"])
+        self.connections["irc"].add_links("irc", ["nmdc"])
 
-    def saveConfig(self):
+    def save_config(self):
         """Saves the current configuration to a file"""
         #TODO: get data from all links
         #TODO: save XML file
         pass
 
-    def autoConnect(self):
+    def auto_connect(self):
         """Starts the links that are set to autoconnect"""
         logging.debug ("Autoconnecting links...")
         for link in self.connections.values():
             if link.auto_connect:
                 link.start()
 
-    def getLinkStructure(self, connection, splitBoth):
+    def link_structure(self, connection, split_both):
         """
         Returns a dict of [in, out] describing how the connection is linked.
         If splitBoth is true, 'both' will be added to keys and 2 way links
@@ -126,49 +126,49 @@ class CrossChatLink(threading.Thread):
         """
         
         #get connections that link to the specified one
-        linksin = [x for x in self.connections if connection in self.connections[x].links]
+        links_in = [x for x in self.connections if connection in self.connections[x].links]
 
-        tempIn = []
-        tempOut = []
-        if splitBoth:
-            tempBoth = []
+        temp_in = []
+        temp_out = []
+        if split_both:
+            temp_both = []
 
         #add incoming links
-        tempIn = [x for x in linksin if x not in self.connections[connection].links]
+        temp_in = [x for x in links_in if x not in self.connections[connection].links]
             
         #add links just out and links both ways
-        for lout in self.connections[connection].links:
-            if lout in linksin:
-                if splitBoth:
-                    tempBoth.append(lout)
+        for out in self.connections[connection].links:
+            if out in links_in:
+                if split_both:
+                    temp_both.append(out)
                 else:
-                    tempIn.append(lout)
-                    tempOut.append(lout)
+                    temp_in.append(out)
+                    temp_out.append(out)
             else:
-                tempOut.append(lout)
-        if splitBoth:
-            return {"in": sorted(tempIn), "out": sorted(tempOut), "both" : sorted(tempBoth)}
+                temp_out.append(out)
+        if split_both:
+            return {"in": sorted(temp_in), "out": sorted(temp_out), "both" : sorted(temp_both)}
         else:
-            return {"in": sorted(tempIn), "out": sorted(tempOut)}
+            return {"in": sorted(temp_in), "out": sorted(temp_out)}
 
-    def parseCommand(self, command, source, user, usrLvl):
+    def parse_command(self, command, source, user, usr_lvl):
         """Adds a command to the command queue to be parsed"""
         #sanitize on the way in
-        if not usrLvl in [self.USER, self.OP, self.ADMIN]:
+        if not usr_lvl in [self.USER, self.OP, self.ADMIN]:
             raise ValueError ("Invalid user level passed to command parser")
         
-        self._commandQueue.put_nowait((command, source, user, usrLvl))
+        self._command_queue.put_nowait((command, source, user, usr_lvl))
 
-    def _doCommand(self, cmd, source, usrLvl):
+    def _do_command(self, cmd, source, usr_lvl):
         """Does actions required by a command and returns the resulting response"""        
-        numCmds = len(cmd)
+        num_cmds = len(cmd)
 
         #Check source connection is still valid
-        if (usrLvl != self.ADMIN or source != None) and source not in self.connections:
+        if (usr_lvl != self.ADMIN or source != None) and source not in self.connections:
             return "Error: Source connection is no longer valid"
 
         #Check command was entered
-        if numCmds == 0:
+        if num_cmds == 0:
             return "ERROR: No command entered. Try 'help' to show help"
 
         #check valid command
@@ -176,15 +176,15 @@ class CrossChatLink(threading.Thread):
             return "ERROR: Invalid command entered. Try 'help' to show help"
         
         #check permissions to run command
-        temp = [x for x in self.helpDB[cmd[0]] if usrLvl & x != 0]
+        temp = [x for x in self.helpDB[cmd[0]] if usr_lvl & x != 0]
         if len(temp) == 0:
             return "ERROR: Invalid command entered. Try 'help' to show help"
 
         #store the permisison level (for accessing the command data)
-        cmdLvl = temp[0]
+        cmd_lvl = temp[0]
         
         #check correct number of parameters
-        if numCmds-1 not in self.helpDB[cmd[0]][cmdLvl][2]:
+        if num_cmds-1 not in self.helpDB[cmd[0]][cmd_lvl][2]:
             return "ERROR: Incorrect number of parameters for '{0}', try 'help {0}' for more info".format(cmd[0])
 
         #case-insensitive commands
@@ -192,18 +192,18 @@ class CrossChatLink(threading.Thread):
 
         #command entered can be executed, start processing it
         if cmd[0] == "help":
-            if numCmds == 1:
+            if num_cmds == 1:
                 rslt = ["Command listing:\n"]
-                for helpCmd in sorted(self.helpDB):
+                for help_cmd in sorted(self.helpDB):
                     #only show commands the user has permission to run
-                    temp = [x for x in self.helpDB[helpCmd] if usrLvl & x != 0]
+                    temp = [x for x in self.helpDB[help_cmd] if usr_lvl & x != 0]
                     if len(temp) != 0:
-                        rslt.append(self.helpDB[helpCmd][temp[0]][0])
+                        rslt.append(self.helpDB[help_cmd][temp[0]][0])
                 return "\n".join(rslt)
             else:
                 cmd[1] = cmd[1].lower()
                 if cmd[1] in self.helpDB:
-                    temp = [x for x in self.helpDB[cmd[1]] if usrLvl & x != 0]
+                    temp = [x for x in self.helpDB[cmd[1]] if usr_lvl & x != 0]
                     if len(temp) != 0:
                         return "Syntax: {}\nNotes: {}".format(*self.helpDB[cmd[1]][temp[0]][0:2])
                 return "ERROR: Command '{}' doesn't exist".format(cmd[1])
@@ -221,31 +221,30 @@ class CrossChatLink(threading.Thread):
                 return "ERROR: 'update' command must specify 'check' or 'apply'"
 
         elif cmd[0] == "status":
-            if numCmds == 1:
+            if num_cmds == 1:
                 #line sperator
                 sep = "+{0:-<9}+{0:-<5}+{0:-<28}+{0:-<6}+{0:-<9}+{0:-<9}+".format("")
                 #header
-                tempRet = ["General status:\n\n{0}\n|{1:9}|{2:5}|{3:28}|{4:6}|{5:9}|{6:9}|\n{0}".format(sep, "Name", "Type", "Server", "State", "Links out", "Links in")]
-                for conName in sorted(self.connections):
+                temp_ret = ["General status:\n\n{0}\n|{1:9}|{2:5}|{3:28}|{4:6}|{5:9}|{6:9}|\n{0}".format(sep, "Name", "Type", "Server", "State", "Links out", "Links in")]
+                for con_name in sorted(self.connections):
                     #add connection data
-                    tempCon = self.connections[conName]
-                    linkStruct = self.getLinkStructure(conName, False)
-                    numLinks = max(len(linkStruct["in"]), len(linkStruct["out"]))
+                    con_obj = self.connections[con_name]
+                    link_struct = self.link_structure(con_name, False)
+                    num_links = max(len(link_struct["in"]), len(link_struct["out"]))
                     
-                    for i in range (0, numLinks):
-                        tempLinkOut = linkStruct["out"][i] if i < len(linkStruct["out"]) else ""
-                        tempLinkIn = linkStruct["in"][i] if i < len(linkStruct["in"]) else ""
+                    for i in range (0, num_links):
+                        link_out = link_struct["out"][i] if i < len(link_struct["out"]) else ""
+                        link_in = link_struct["in"][i] if i < len(link_struct["in"]) else ""
                         if i == 0:
                             #first line
-                            tempType = type(tempCon)
-                            tempTypeName = "IRC" if tempType == links.IRC else ("NMDC" if tempType == links.NMDC else "ADC")
-                            tempRet.append("|{:9}|{:5}|{:28}|{:6}|{:9}|{:9}|".format(conName, tempTypeName, tempCon.server, tempCon.connection_state, tempLinkOut, tempLinkIn))
+                            con_type = "IRC" if type(con_obj) == links.IRC else ("NMDC" if type(con_obj) == links.NMDC else "ADC")
+                            temp_ret.append("|{:9}|{:5}|{:28}|{:6}|{:9}|{:9}|".format(con_name, con_type, con_obj.server, con_obj.connection_state, link_out, link_in))
                         else:
                             #secondary lines
-                            tempRet.append("|{0:9}|{0:5}|{0:28}|{0:6}|{1:9}|{2:9}|".format("", tempLinkOut, tempLinkIn))
+                            temp_ret.append("|{0:9}|{0:5}|{0:28}|{0:6}|{1:9}|{2:9}|".format("", link_out, link_in))
                     #seperator
-                    tempRet.append(sep)
-                return "\n".join(tempRet)
+                    temp_ret.append(sep)
+                return "\n".join(temp_ret)
             else:
                 cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
@@ -262,7 +261,7 @@ class CrossChatLink(threading.Thread):
                 return "ERROR: No connection named '{}'".format(cmd[1])
 
         elif cmd[0] == "disconnect":
-            if numCmds == 1:
+            if num_cmds == 1:
                 return "TODO: Disconnect source connection '{}'".format(source)
             else:
                 cmd[1] = cmd[1].lower()
@@ -272,7 +271,7 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: No connection named '{}'".format(cmd[1])
 
         elif cmd[0] == "reconnect":
-            if numCmds == 1:
+            if num_cmds == 1:
                 return "TODO: Reconnect source connection '{}'".format(source)
             else:
                 cmd[1] = cmd[1].lower()
@@ -282,7 +281,7 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: No connection named '{}'".format(cmd[1])
 
         elif cmd[0] == "link":
-            if numCmds == 2:
+            if num_cmds == 2:
                 cmd[1] = cmd[1].lower()
                 if source == cmd[1]:
                     return "ERROR: No local links"
@@ -309,7 +308,7 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: Link direction must be '<-', '->', or '<->'"
 
         elif cmd[0] == "unlink":
-            if numCmds == 2:
+            if num_cmds == 2:
                 cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: Unlink source connection ('{}') ---> {}".format(source, cmd[1])
@@ -330,7 +329,7 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: Unlink direction must be '<-', '->', or '<->'"
 
         elif cmd[0] == "viewusers":
-            if numCmds == 1:
+            if num_cmds == 1:
                 return "TODO: List all users of source connection ('{}')".format(source)
             else:
                 cmd[1] = cmd[1].lower()
@@ -340,11 +339,11 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: No connection named '{}'".format(cmd[1])
 
         elif cmd[0] == "setuser":
-            for x in range (numCmds - 3, numCmds):
+            for x in range (num_cmds - 3, num_cmds):
                 cmd[x] = cmd[x].lower()
                 if cmd[x] != "y" and cmd[x] != "n" and cmd[x] != "u":
                     return "ERROR: Invalid setting specified, must be 'y', 'n', or 'u' (yes/no/unset)"
-            if numCmds == 5:
+            if num_cmds == 5:
                 return "TODO: add user '{}' to settings as {}/{}/{}".format(*cmd[1:])
             else:
                 cmd[1] = cmd[1].lower()
@@ -388,10 +387,10 @@ class CrossChatLink(threading.Thread):
             else:
                 attrs.extend(["ident_text", "channels", "connect_cmds"])
                 
-            if numCmds == 2:
+            if num_cmds == 2:
                 #return a list of attributes
                 return "Attributes of '{}':\n".format(cmd[1]) + "\n".join(attrs)
-            elif numCmds == 3:
+            elif num_cmds == 3:
                 cmd[2] = cmd[2].lower()
                 #display current setting
                 if cmd[2] in attrs:
@@ -410,15 +409,15 @@ class CrossChatLink(threading.Thread):
 
         logging.critical("helpDB incorrectly configured, let {} through, but it didn't match any if statements".format(cmd[0]))
         
-    def _processQueue(self):
+    def _process_queue(self):
         """Takes the next item from the queue and processes it"""
         try:
             #blocks until something is in the queue
-            temp = self._commandQueue.get(True, 5)
+            temp = self._command_queue.get(True, 5)
         except queue.Empty as e:
             return False
         #unpack the tuple
-        command, source, user, usrLvl = temp
+        command, source, user, usr_lvl = temp
 
         #post-response flags (processed *after* sending data to client)
         shutdown, disconnect = False, False
@@ -431,23 +430,23 @@ class CrossChatLink(threading.Thread):
         logging.debug("Command recieved: " + str(params))
 
         #Check for post-response actions
-        if len(params) == 1 and params[0] == "shutdown" and usrLvl == self.ADMIN:
+        if len(params) == 1 and params[0] == "shutdown" and usr_lvl == self.ADMIN:
             shutdown = True
             response = "Shutting down the server..."
-        elif len(params) == 1 and params[0] == "exit" and usrLvl == self.ADMIN:
+        elif len(params) == 1 and params[0] == "exit" and usr_lvl == self.ADMIN:
             disconnect = True
             response = "You are being disconnected (server is still running)"
         else:
             #general command processing
-            response = self._doCommand(params, source, usrLvl)
+            response = self._do_command(params, source, usr_lvl)
 
         #send the response
         if source == None: #admin interface
-            self.adminInterface.msgQueue.put_nowait(response)
+            self.admin_interface.msg_queue.put_nowait(response)
             if disconnect:
-                self.adminInterface.disconnectClient()
+                self.admin_interface.disconnect_client()
         elif source in self.connections:
-            self.connections[source].sendPM(response, user)
+            self.connections[source].send_PM(response, user)
         else:
             logging.warning("Attempted to send command response to invalid link")
 
@@ -460,7 +459,7 @@ class CrossChatLink(threading.Thread):
     def shutdown(self):
         """Shut. Down. Everything."""
         logging.info("Shutting down admin interface")
-        self.adminInterface.join()
+        self.admin_interface.join()
         logging.info("Shutting down links")
         for link in self.connections.values():
             link.join()
@@ -469,12 +468,12 @@ class CrossChatLink(threading.Thread):
     def stop(self):
         """Tells the program it's time to exit"""
         logging.debug ("Telling the program to exit")
-        self._stopReq.set()
+        self._stop_req.set()
 
     def run(self):
         """Proccesses the actions sent to it"""
-        while not self._stopReq.isSet():
-            self._processQueue()
+        while not self._stop_req.isSet():
+            self._process_queue()
 
         logging.info("Shutting down...")
         self.shutdown()
@@ -492,8 +491,8 @@ if __name__ == "__main__":
     print("Program started, press CTRL-C to exit")
 
     instance = CrossChatLink()
-    instance.loadConfig()
-    instance.autoConnect()
+    instance.load_config()
+    instance.auto_connect()
     instance.start()
 
     #Wait until the main thread exits (or throws an exception)

@@ -6,19 +6,19 @@ import queue
 import miniboa
 
 #Client connected via telnet
-_adminClient = None
+_admin_client = None
 
 #connect and disconnect handlers
-def onConnect(client):
-    global _adminClient
+def on_connect(client):
+    global _admin_client
     logging.info("Client connected from {}".format(client.addrport()))
-    _adminClient = client
-    _adminClient.send("Welcome to the CrossChatLink admin interface!"
+    _admin_client = client
+    _admin_client.send("Welcome to the CrossChatLink admin interface!"
                          "\n\nType 'help' or '?' for a list of commands\n\n")
-def onDisconnect(client):
-    global _adminClient
+def on_disconnect(client):
+    global _admin_client
     logging.info ("Client disconnected")
-    _adminClient = None
+    _admin_client = None
 
 class Admin (threading.Thread):
     """
@@ -28,37 +28,37 @@ class Admin (threading.Thread):
     def __init__(self, program):
         super(Admin, self).__init__()
         self._program = program
-        self._telnetServer = miniboa.TelnetServer(23, "127.0.0.1", onConnect,
-                                                 onDisconnect, 1, 0.3)
-        self._stopReq = threading.Event()
-        self.msgQueue = queue.Queue()
+        self._server = miniboa.TelnetServer(23, "127.0.0.1", on_connect,
+                                                 on_disconnect, 1, 0.3)
+        self._stop_req = threading.Event()
+        self.msg_queue = queue.Queue()
         
-    def _processCommands(self):
+    def _process_commands(self):
         """Recieves a line from the client and proccesses it (assumes valid client)"""
-        if _adminClient.active and _adminClient.cmd_ready:
-            msg = _adminClient.get_command()
+        if _admin_client.active and _admin_client.cmd_ready:
+            msg = _admin_client.get_command()
             #add command to the queue (None for link/user = admin interface)
-            self._program.parseCommand(msg, None, None, self._program.ADMIN)
+            self._program.parse_command(msg, None, None, self._program.ADMIN)
 
-    def disconnectClient(self):
+    def disconnect_client(self):
         """Sends all messages and disconnects the client"""
         logging.debug("Disconnecting client")
-        if _adminClient != None:
-            while self._processQueue():
+        if _admin_client != None:
+            while self._process_queue():
                 pass
 
             #update the client so they get the messages
-            self._telnetServer.poll()
-            _adminClient.deactivate()
+            self._server.poll()
+            _admin_client.deactivate()
             #update so the client is disconnected
-            self._telnetServer.poll()
+            self._server.poll()
         
-    def _processQueue(self):
+    def _process_queue(self):
         """Sends messages in the queue to the client (assumes valid client)"""
-        if self.msgQueue.qsize() == 0:
+        if self.msg_queue.qsize() == 0:
             return False
         try:
-            _adminClient.send(self.msgQueue.get_nowait() + "\n")
+            _admin_client.send(self.msg_queue.get_nowait() + "\n")
             return True
         except queue.Empty as e:
             pass
@@ -67,19 +67,19 @@ class Admin (threading.Thread):
     def run(self):
         """Starts the telnet server"""
         logging.info ("Starting telnet server")
-        while not self._stopReq.isSet():
-            self._telnetServer.poll()
-            if _adminClient != None:
-                self._processCommands()
-                self._processQueue()
+        while not self._stop_req.isSet():
+            self._server.poll()
+            if _admin_client != None:
+                self._process_commands()
+                self._process_queue()
 
         #shutting down, disconnect the client
-        self.disconnectClient()
-        self._telnetServer.stop()
+        self.disconnect_client()
+        self._server.stop()
             
     def join(self, timeout=None):
         """Override join to shut down the server and wait until it exits"""
-        self._stopReq.set()
+        self._stop_req.set()
         super(Admin, self).join(timeout)
         
         

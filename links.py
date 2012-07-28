@@ -19,7 +19,7 @@ class Link(threading.Thread):
     CONNECTED = 2
     
 
-    def __init__(self, program, server, nick, passwd, prefix, links, autoConnect, autoReconnect, mcRate, pmRate, opControl, users):
+    def __init__(self, program, server, nick, passwd, prefix, links, auto_connect, auto_reconnect, mc_rate, pm_rate, op_control, users):
         super(Link, self).__init__()
 
         if type(self) == Link:
@@ -34,18 +34,18 @@ class Link(threading.Thread):
         self.passwd = passwd
         self.prefix = prefix
         self._links = links
-        self.auto_connect = autoConnect
-        self.auto_reconnect = autoReconnect
-        self.mc_rate = mcRate
-        self.pm_rate = pmRate
-        self.op_control = opControl
+        self.auto_connect = auto_connect
+        self.auto_reconnect = auto_reconnect
+        self.mc_rate = mc_rate
+        self.pm_rate = pm_rate
+        self.op_control = op_control
         self._connection_state = self.DISCONNECTED
         self.static_users = utils.UserData(users)
         self._dynamic_users = utils.UserData()
         self._queues = [queue.Queue(), queue.Queue()]
         #self._timers = [utils.RepeatingTimer(), utils.RepeatingTimer()]
 
-    def _getConState(self):
+    def _get_con_state(self):
         """Returns a text representation of the connection state"""
         if self._connection_state == self.DISCONNECTED:
             return "D/C"
@@ -56,22 +56,22 @@ class Link(threading.Thread):
         else:
             return "???"
         
-    def _setLinks(self, myID, links):
+    def _set_links(self, myID, links):
         """Set the links (property method)"""
         self._links = []
-        self.addLinks(myID, links)
+        self.add_links(myID, links)
 
-    def _getLinks(self):
+    def _get_links(self):
         """Get the links (property method)"""
         return self._links
 
-    def delLinks (self, links):
+    def del_links (self, links):
         """Stops the connection from broadcasting to the specified link(s)"""
         if not isinstance(links, list):
             raise TypeError("Links specified must be in a list")
         self._links[:] = [t for t in self._links if t not in links]
             
-    def addLinks(self, myID, links):
+    def add_links(self, myID, links):
         """
         Adds connection(s) to broadcast to.
         Links can be a string or a list of strings identifying connections
@@ -85,15 +85,15 @@ class Link(threading.Thread):
             else:
                 logger.warning("Link {} not added (already added or invalid)".format(x))
 
-    def getUserPerm (self, nick, perm):
+    def user_perm (self, nick, perm):
         """Check permissions on the user"""
-        temp = self.static_users.getAttr(nick, perm)
+        temp = self.static_users.attr(nick, perm)
         #set to true or (unset and (not looking at OP attribute or are and they have control) and dynamicly assigned permission)
         return temp == UserData.YES or (temp == UserData.UNSET and
-                                       (perm != UserData.CTRL or self.opControl) and
-                                       self._dynamic_users.getAttr(nick, perm) == UserData.YES)
+                                       (perm != UserData.CTRL or self.op_control) and
+                                       self._dynamic_users.attr(nick, perm) == UserData.YES)
 
-    def _broadcastMessage(self, nick, text, fmt):
+    def _broadcast_message(self, nick, text, fmt):
         """
         Broadcasts a message to other links.
         Format string should have {0} and {1} in it for nick and message respectively
@@ -104,21 +104,21 @@ class Link(threading.Thread):
         msg = self._unescape(fmt.format(nick, text))
 
         #to store invalid links
-        delLinks = []
+        del_links = []
 
         #send message to all links
         for target in self._links:
             if (target in self._program.connections):
-                self._program.connections[target].sendChat(msg)
+                self._program.connections[target].send_chat(msg)
             else:
-                delLinks.append(target)
+                del_links.append(target)
                 logger.error("Tried to send message to a link that doesn't exist (deleting it)")
 
         #delete invalid links
-        for x in delLinks:
+        for x in del_links:
             del self._links[x]
 
-    def _processQueue(self, num):
+    def _process_queue(self, num):
         """
         Sends a message in the chat/pm queue to the link.
         Messages are assumed to be fully formatted, escaped and converted to bytes
@@ -146,17 +146,17 @@ class Link(threading.Thread):
         super(Link, self).join(timeout)
 
     #set property
-    links = property(_getLinks, _setLinks)
-    connection_state = property(_getConState)
+    links = property(_get_links, _set_links)
+    connection_state = property(_get_con_state)
 
 ##################################################################################################
 class DC (Link):
     """Superclass for all DC hub connections"""
 
-    def __init__(self, program, server, nick, passwd, prefix, links, share, slots, client, autoConnect, autoReconnect,
-                 mcRate, pmRate, opControl, users):
+    def __init__(self, program, server, nick, passwd, prefix, links, share, slots, client, auto_connect, auto_reconnect,
+                 mc_rate, pm_rate, op_control, users):
 
-        super(DC, self).__init__(program, server, nick, passwd, prefix, links, autoConnect, autoReconnect, mcRate, pmRate, opControl, users)
+        super(DC, self).__init__(program, server, nick, passwd, prefix, links, auto_connect, auto_reconnect, mc_rate, pm_rate, op_control, users)
 
         if type(self) == DC:
             raise Exception("DC must be subclassed")
@@ -165,23 +165,23 @@ class DC (Link):
         self.slots = slots
         self.client = client
 
-    def sendChat(self, text):
+    def send_chat(self, text):
         """Sends a message to the mainchat queue"""
         #escape and format the message
         text = self._escape(text)
-        msg = self._mcFormat.format(self.nick, text)
+        msg = self._mc_format.format(self.nick, text)
 
         #encode and add to queue
         self.queues[self.MAIN].put_nowait(msg.encode(self._encoding, "replace"))
     
-    def sendPM (self, text, user):
+    def send_PM (self, text, user):
         """
         Sends a private message to the PM queue
         For ADC links, the parameter is the SID of the user, not the nick
         """
         #escape and format the message
         text = self._escape(text)
-        msg = self._pmFormat.format(user, self._myID(), text)
+        msg = self._pm_format.format(user, self._myID(), text)
 
         #encode and add to queue
         self.queues[self.PM].put_nowait(msg.encode(self._encoding, "replace")) 
@@ -191,31 +191,31 @@ class DC (Link):
 class NMDC (DC):
     """For connecting to NMDC hubs"""
 
-    def __init__(self, program, server, nick, passwd, prefix, links = [], share = "10737418240", slots = "5", client = "CrossChatLink", autoConnect = True, autoReconnect = True,
-                 mcRate = 0, pmRate = 0, opControl = True, users = None):
+    def __init__(self, program, server, nick, passwd, prefix, links = [], share = "10737418240", slots = "5", client = "CrossChatLink",
+                 auto_connect = True, auto_reconnect = True, mc_rate = 0, pm_rate = 0, op_control = True, users = None):
         logging.debug("Configuring a new NMDC link")
         
-        super(NMDC, self).__init__(program, server, nick, passwd, prefix, links, share, slots, client, autoConnect, autoReconnect,
-                 mcRate, pmRate, opControl, users)
+        super(NMDC, self).__init__(program, server, nick, passwd, prefix, links, share, slots, client, auto_connect, auto_reconnect,
+                 mc_rate, pm_rate, op_control, users)
 
         #formatting constants
-        self._mcFormat = "<{0}> {1}|" #to/msg
-        self._pmFormat = "$To: {0} From: {1} $<{1}> {2}|" #to/from/msg
+        self._mc_format = "<{0}> {1}|" #to/msg
+        self._pm_format = "$To: {0} From: {1} $<{1}> {2}|" #to/from/msg
         self._encoding = "cp1252"
         #escape translator
-        self._escapeMap = str.maketrans({0: "&#0;", # NULL
+        self._escape_map = str.maketrans({0: "&#0;", # NULL
                                          5: "&#5;", # ENQ
                                          36: "&#36;", #$
                                          124: "&#124;"}) #|
 
-    def _myID():
+    def _ID():
         """The ID of the bot (ADC = SID, NMDC = nick)"""
-        return self._mySID
+        return self.nick
 
     def _escape(self, msg):
         """Returns an escaped version of msg"""
         #TODO: test this works (issues with spaces at least)
-        return temp.translate(self._escapeMap)
+        return temp.translate(self._escape_map)
 
     def _unescape(self, msg):
         """Returns an unescaped version of msg"""
@@ -225,7 +225,7 @@ class NMDC (DC):
         msg = msg.replace("&#124;", chr(124))
         return msg
     
-    def _parseLine(self, line):
+    def _parse_line(self, line):
         """Parses a line recived from the server"""
         #TODO: Implement NMDC protocol
         pass
@@ -241,24 +241,24 @@ class ADC (DC):
 
     _delim = "\n"
     
-    def __init__(self, program, server, nick, passwd, prefix, links = [], share = "10737418240", slots = "5", client = "CrossChatLink", autoConnect = True, autoReconnect = True,
-                 mcRate = 0, pmRate = 0, opControl = True, users = None):
+    def __init__(self, program, server, nick, passwd, prefix, links = [], share = "10737418240", slots = "5", client = "CrossChatLink",
+                 auto_connect = True, auto_reconnect = True, mc_rate = 0, pm_rate = 0, op_control = True, users = None):
         logging.debug("Configuring a new ADC link")
         
-        super(ADC, self).__init__(program, server, nick, passwd, prefix, links, share, slots, client, autoConnect, autoReconnect,
-                 mcRate, pmRate, opControl, users)
+        super(ADC, self).__init__(program, server, nick, passwd, prefix, links, share, slots, client, auto_connect, auto_reconnect,
+                 mc_rate, pm_rate, op_control, users)
 
         #formatting constants
-        self._mcFormat = "BMSG {0} {1}\n" #to/msg
-        self._pmFormat = "DMSG {1} {0} {2} PM{1}\n" #to/from/msg
+        self._mc_format = "BMSG {0} {1}\n" #to/msg
+        self._pm_format = "DMSG {1} {0} {2} PM{1}\n" #to/from/msg
         self._encoding = "utf-8"
 
-        self._userSIDs = dict()
-        self._mySID = None
+        self._user_SIDs = dict()
+        self._SID = None
 
-    def _myID():
+    def _ID():
         """The ID of the bot (ADC = SID, NMDC = nick)"""
-        return self._mySID
+        return self._SID
 
     def _escape(self, msg):
         """Returns an escaped version of msg"""
@@ -270,9 +270,9 @@ class ADC (DC):
 
     def _unescape(self, msg):
         """Returns an unescaped version of msg"""
-        return utils.escapeReplace(msg, "\\", {"\\": "\\\\", "s": " ", "n": "\n"})
+        return utils.escape_replace(msg, "\\", {"\\": "\\\\", "s": " ", "n": "\n"})
         
-    def _parseLine(self, line):
+    def _parse_line(self, line):
         """Parses a line recived from the server"""
         #TODO: Implement ADC protocol
         pass
@@ -284,22 +284,22 @@ class ADC (DC):
 ##################################################################################################
 class IRC (Link):
 
-    def __init__(self, program, server, nick, passwd, prefix, links = [], identText = "CrossChatLink", channels = "", connectCmds = [], autoConnect = True, autoReconnect = True,
-                 mcRate = 0, pmRate = 0, opControl = True, users = None):
+    def __init__(self, program, server, nick, passwd, prefix, links = [], identText = "CrossChatLink", channels = "", connect_cmds = [], auto_connect = True, auto_reconnect = True,
+                 mc_rate = 0, pm_rate = 0, op_control = True, users = None):
         logging.debug("Configuring a new IRC link")
         
-        super(IRC, self).__init__(program, server, nick, passwd, prefix, links, autoConnect, autoReconnect, mcRate, pmRate, opControl, users)
+        super(IRC, self).__init__(program, server, nick, passwd, prefix, links, auto_connect, auto_reconnect, mc_rate, pm_rate, op_control, users)
 
         self.ident_text = identText
         self.channels = channels
-        self.connect_cmds = connectCmds
+        self.connect_cmds = connect_cmds
 
         #formatting constants
-        self._mcFormat = "PRIVMSG {0} :{1}\r\n" #channel(s)/msg
-        self._pmFormat = "PRIVMSG {0} :{1}\r\n" #to/msg
+        self._mc_format = "PRIVMSG {0} :{1}\r\n" #channel(s)/msg
+        self._pm_format = "PRIVMSG {0} :{1}\r\n" #to/msg
         self._encoding = "utf-8"
 
-    def sendChat(self, text):
+    def send_chat(self, text):
         """Sends a message to the mainchat queue"""
         #Split multiline messages
         msgs = text.split("\r\n")
@@ -307,12 +307,12 @@ class IRC (Link):
         for msg in msgs:
             #escape and format the message
             text = self._escape(text)
-            msg = self._mcFormat.format(self._channelsNoKeys(), text)
+            msg = self._mc_format.format(self._channels_no_keys(), text)
 
             #encode in ansi
             self.queues[self.MAIN].put_nowait(msg.encode(self._encoding, "replace"))
     
-    def sendPM (self, text, user):
+    def send_PM (self, text, user):
         """Sends a private message to the PM queue"""
         #Split multiline messages
         msgs = text.split("\r\n")
@@ -320,12 +320,12 @@ class IRC (Link):
         for msg in msgs:
             #escape and format the message
             text = self._escape(text)
-            msg = self._pmFormat.format(user, text)
+            msg = self._pm_format.format(user, text)
 
             #encode in ansi
             self.queues[self.PM].put_nowait(msg.encode(self._encoding, "replace"))
 
-    def _channelsNoKeys(self):
+    def _channels_no_keys(self):
         """Returns a list of channels without the keys"""
         #done in one line just cause
         #splits by "#", trims spaces and commas, filters nulls out,
