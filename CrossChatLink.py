@@ -96,9 +96,14 @@ class CrossChatLink(threading.Thread):
         #TODO: load XML file with settings in it
         #TODO: create/configure the link threads
         logging.debug("Setting up links")
-        self.connections["nmdctest"] = links.NMDC(self, "127.0.0.1:443", "Nick", "aPass", "[NMDC]")
-        self.connections["adctest"] = links.ADC(self, "127.0.0.1:443", "Nick", "aPass", "[ADC]")
-        self.connections["irctest"] = links.IRC(self, "irc.esper.net:6667", "Nick", "aPass", "[IRC]")
+
+        #testing
+        self.connections["nmdc"] = links.NMDC(self, "127.0.0.1:443", "Nick", "aPass", "[NMDC]")
+        self.connections["adc"] = links.ADC(self, "127.0.0.1:443", "Nick", "aPass", "[ADC]")
+        self.connections["irc"] = links.IRC(self, "127.0.0.1:6667", "Nick", "aPass", "[IRC]")
+        self.connections["nmdc"].addLinks("nmdc", ["adc", "irc"])
+        self.connections["adc"].addLinks("adc", ["irc"])
+        self.connections["irc"].addLinks("irc", ["nmdc"])
 
     def saveConfig(self):
         """Saves the current configuration to a file"""
@@ -110,8 +115,41 @@ class CrossChatLink(threading.Thread):
         """Starts the links that are set to autoconnect"""
         logging.debug ("Autoconnecting links...")
         for link in self.connections.values():
-            if link.autoConnect:
+            if link.auto_connect:
                 link.start()
+
+    def getLinkStructure(self, connection, splitBoth):
+        """
+        Returns a dict of [in, out] describing how the connection is linked.
+        If splitBoth is true, 'both' will be added to keys and 2 way links
+        will be stored in it instead
+        """
+        
+        #get connections that link to the specified one
+        linksin = [x for x in self.connections if connection in self.connections[x].links]
+
+        tempIn = []
+        tempOut = []
+        if splitBoth:
+            tempBoth = []
+
+        #add incoming links
+        tempIn = [x for x in linksin if x not in self.connections[connection].links]
+            
+        #add links just out and links both ways
+        for lout in self.connections[connection].links:
+            if lout in linksin:
+                if splitBoth:
+                    tempBoth.append(lout)
+                else:
+                    tempIn.append(lout)
+                    tempOut.append(lout)
+            else:
+                tempOut.append(lout)
+        if splitBoth:
+            return {"in": sorted(tempIn), "out": sorted(tempOut), "both" : sorted(tempBoth)}
+        else:
+            return {"in": sorted(tempIn), "out": sorted(tempOut)}
 
     def parseCommand(self, command, source, user, usrLvl):
         """Adds a command to the command queue to be parsed"""
@@ -119,7 +157,7 @@ class CrossChatLink(threading.Thread):
         if not usrLvl in [self.USER, self.OP, self.ADMIN]:
             raise ValueError ("Invalid user level passed to command parser")
         
-        self._commandQueue.put_nowait((command.lower(), source, user, usrLvl))
+        self._commandQueue.put_nowait((command, source, user, usrLvl))
 
     def _doCommand(self, cmd, source, usrLvl):
         """Does actions required by a command and returns the resulting response"""        
@@ -149,6 +187,9 @@ class CrossChatLink(threading.Thread):
         if numCmds-1 not in self.helpDB[cmd[0]][cmdLvl][2]:
             return "ERROR: Incorrect number of parameters for '{0}', try 'help {0}' for more info".format(cmd[0])
 
+        #case-insensitive commands
+        cmd[0] = cmd[0].lower()
+
         #command entered can be executed, start processing it
         if cmd[0] == "help":
             if numCmds == 1:
@@ -160,6 +201,7 @@ class CrossChatLink(threading.Thread):
                         rslt.append(self.helpDB[helpCmd][temp[0]][0])
                 return "\n".join(rslt)
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.helpDB:
                     temp = [x for x in self.helpDB[cmd[1]] if usrLvl & x != 0]
                     if len(temp) != 0:
@@ -170,6 +212,7 @@ class CrossChatLink(threading.Thread):
             return "{} by pR0Ps\nProject page: https://bitbucket.org/pR0Ps/crosschatlink\nReleased under the GNU GPL 3 licence.".format(VERSION)
 
         elif cmd[0] == "update":
+            cmd[1] = cmd[1].lower()
             if cmd[1] == "check":
                 return "TODO: Check for update"
             elif cmd[1] == "apply":
@@ -179,8 +222,32 @@ class CrossChatLink(threading.Thread):
 
         elif cmd[0] == "status":
             if numCmds == 1:
-                return "TODO: General status"
+                #line sperator
+                sep = "+{0:-<9}+{0:-<5}+{0:-<28}+{0:-<6}+{0:-<9}+{0:-<9}+".format("")
+                #header
+                tempRet = ["General status:\n\n{0}\n|{1:9}|{2:5}|{3:28}|{4:6}|{5:9}|{6:9}|\n{0}".format(sep, "Name", "Type", "Server", "State", "Links out", "Links in")]
+                for conName in sorted(self.connections):
+                    #add connection data
+                    tempCon = self.connections[conName]
+                    linkStruct = self.getLinkStructure(conName, False)
+                    numLinks = max(len(linkStruct["in"]), len(linkStruct["out"]))
+                    
+                    for i in range (0, numLinks):
+                        tempLinkOut = linkStruct["out"][i] if i < len(linkStruct["out"]) else ""
+                        tempLinkIn = linkStruct["in"][i] if i < len(linkStruct["in"]) else ""
+                        if i == 0:
+                            #first line
+                            tempType = type(tempCon)
+                            tempTypeName = "IRC" if tempType == links.IRC else ("NMDC" if tempType == links.NMDC else "ADC")
+                            tempRet.append("|{:9}|{:5}|{:28}|{:6}|{:9}|{:9}|".format(conName, tempTypeName, tempCon.server, tempCon.connection_state, tempLinkOut, tempLinkIn))
+                        else:
+                            #secondary lines
+                            tempRet.append("|{0:9}|{0:5}|{0:28}|{0:6}|{1:9}|{2:9}|".format("", tempLinkOut, tempLinkIn))
+                    #seperator
+                    tempRet.append(sep)
+                return "\n".join(tempRet)
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: Detailed status for '{}' connection".format(cmd[1])
                 else:
@@ -188,6 +255,7 @@ class CrossChatLink(threading.Thread):
 
         #exit and shutdown have already been processed
         elif cmd[0] == "connect":
+            cmd[1] = cmd[1].lower()
             if cmd[1] in self.connections:
                 return "TODO: Connect connection '{}'".format(cmd[1])
             else:
@@ -197,6 +265,7 @@ class CrossChatLink(threading.Thread):
             if numCmds == 1:
                 return "TODO: Disconnect source connection '{}'".format(source)
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: Disconnect connection '{}'".format(cmd[1])
                 else:
@@ -206,6 +275,7 @@ class CrossChatLink(threading.Thread):
             if numCmds == 1:
                 return "TODO: Reconnect source connection '{}'".format(source)
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: Reconnect connection '{}'".format(cmd[1])
                 else:
@@ -213,6 +283,7 @@ class CrossChatLink(threading.Thread):
 
         elif cmd[0] == "link":
             if numCmds == 2:
+                cmd[1] = cmd[1].lower()
                 if source == cmd[1]:
                     return "ERROR: No local links"
                 if cmd[1] in self.connections:
@@ -221,6 +292,8 @@ class CrossChatLink(threading.Thread):
                     return "ERROR: No connection named '{}'".format(cmd[1])
             else:
                 #check connections are valid
+                cmd[2] = cmd[2].lower()
+                cmd[3] = cmd[3].lower()
                 if cmd[2] == cmd[3]:
                     return "ERROR: No local links"
                 for x in range(2, 4):
@@ -237,18 +310,20 @@ class CrossChatLink(threading.Thread):
 
         elif cmd[0] == "unlink":
             if numCmds == 2:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: Unlink source connection ('{}') ---> {}".format(source, cmd[1])
                 else:
                     return "ERROR: No connection named '{}'".format(cmd[1])
             else:
                 for x in range(2, 4):
+                    cmd[x] = cmd[x].lower()
                     if cmd[x] not in self.connections:
                         return "ERROR: No connection named '{}'".format(cmd[x])
                 if cmd[1] == "->":
                     return "TODO: Unlink '{}' ---> '{}'".format(*cmd[2:])
                 elif cmd[1] == "<-":
-                    return "TODO: Un;ink '{}' <--- '{}'".format(*cmd[2:])
+                    return "TODO: Unlink '{}' <--- '{}'".format(*cmd[2:])
                 elif cmd[1] == "<->":
                     return "TODO: Unlink '{}' <---> '{}'".format(*cmd[2:])
                 else:
@@ -258,6 +333,7 @@ class CrossChatLink(threading.Thread):
             if numCmds == 1:
                 return "TODO: List all users of source connection ('{}')".format(source)
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: List all users of connection '{}'".format(cmd[1])
                 else:
@@ -265,17 +341,21 @@ class CrossChatLink(threading.Thread):
 
         elif cmd[0] == "setuser":
             for x in range (numCmds - 3, numCmds):
+                cmd[x] = cmd[x].lower()
                 if cmd[x] != "y" and cmd[x] != "n" and cmd[x] != "u":
                     return "ERROR: Invalid setting specified, must be 'y', 'n', or 'u' (yes/no/unset)"
             if numCmds == 5:
                 return "TODO: add user '{}' to settings as {}/{}/{}".format(*cmd[1:])
             else:
+                cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
                     return "TODO: add user '{}' to settings as {}/{}/{}".format(*cmd[2:])
                 else:
                     return "ERROR: No connection named '{}'".format(cmd[1])
 
         elif cmd[0] == "addconnection":
+            cmd[1] = cmd[1].lower()
+            cmd[2] = cmd[2].lower()
             if cmd[1] in self.connections:
                 return "ERROR: Connection '{}' already exists, delete it first with 'delconnection'".format(cmd[1])
             if cmd[2] == "nmdc":
@@ -288,6 +368,7 @@ class CrossChatLink(threading.Thread):
                 return "ERROR: '{}' is not a valid connection type".format(cmd[2])
             
         elif cmd[0] == "delconnection":
+            cmd[1] = cmd[1].lower()
             if cmd[1] in self.connections:
                 return "TODO: Detele connection '{}'".format(cmd[1])
             else:
@@ -295,27 +376,30 @@ class CrossChatLink(threading.Thread):
             
         elif cmd[0] == "setconnection":
             #setconnection <connection> [property [value]]
+            cmd[1] = cmd[1].lower()
             if cmd[1] not in self.connections:
                 return "ERROR: No connection named '{}'".format(cmd[1])
 
             #set availible attributes
-            attrs = ["server", "nick", "passwd", "autoConnect", "autoReconnect", "mcRate", "pmRate", "opControl"]
+            attrs = ["server", "nick", "passwd", "auto_connect", "auto_reconnect", "mc_rate", "pm_rate", "op_control"]
             temp = type(self.connections[cmd[1]])
             if temp == links.ADC or temp == links.NMDC:
                 attrs.extend(["share", "slots", "client"])
             else:
-                attrs.extend(["identText", "channels", "connectCmds"])
+                attrs.extend(["ident_text", "channels", "connect_cmds"])
                 
             if numCmds == 2:
                 #return a list of attributes
                 return "Attributes of '{}':\n".format(cmd[1]) + "\n".join(attrs)
             elif numCmds == 3:
+                cmd[2] = cmd[2].lower()
                 #display current setting
                 if cmd[2] in attrs:
                     return "'{}' attribute of '{}' is: {}".format(cmd[2], cmd[1], getattr(self.connections[cmd[1]], cmd[2]))
                 else:
                     return "ERROR: No attribute '{}' for connection '{}'".format(cmd[2], cmd[1])
             else:
+                cmd[2] = cmd[2].lower()
                 #set attribute
                 if cmd[2] in attrs:
                     return "TODO: Set '{}' attribute of connection '{}' to: {}".format(cmd[2], cmd[1], cmd[3])

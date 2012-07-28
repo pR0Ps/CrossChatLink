@@ -13,6 +13,12 @@ class Link(threading.Thread):
     MAIN = 0
     PM = 1
 
+    #Connection states
+    DISCONNECTED = 0
+    CONNECTING = 1
+    CONNECTED = 2
+    
+
     def __init__(self, program, server, nick, passwd, prefix, links, autoConnect, autoReconnect, mcRate, pmRate, opControl, users):
         super(Link, self).__init__()
 
@@ -28,58 +34,64 @@ class Link(threading.Thread):
         self.passwd = passwd
         self.prefix = prefix
         self._links = links
-        self.autoConnect = autoConnect
-        self.autoReconnect = autoReconnect
-        self.mcRate = mcRate
-        self.pmRate = pmRate
-        self.opControl = opControl
-        self.staticUsers = utils.UserData(users)
-        self._dynamicUsers = utils.UserData()
+        self.auto_connect = autoConnect
+        self.auto_reconnect = autoReconnect
+        self.mc_rate = mcRate
+        self.pm_rate = pmRate
+        self.op_control = opControl
+        self._connection_state = self.DISCONNECTED
+        self.static_users = utils.UserData(users)
+        self._dynamic_users = utils.UserData()
         self._queues = [queue.Queue(), queue.Queue()]
         #self._timers = [utils.RepeatingTimer(), utils.RepeatingTimer()]
 
-    def setLinks(self, links):
-        """Sets which connections this link will broadcast to"""
+    def _getConState(self):
+        """Returns a text representation of the connection state"""
+        if self._connection_state == self.DISCONNECTED:
+            return "D/C"
+        elif self._connection_state == self.CONNECTING:
+            return "CNTNG"
+        elif self._connection_state == self.CONNECTED:
+            return "CNTED"
+        else:
+            return "???"
+        
+    def _setLinks(self, myID, links):
+        """Set the links (property method)"""
         self._links = []
-        self.addLinks(links)
+        self.addLinks(myID, links)
+
+    def _getLinks(self):
+        """Get the links (property method)"""
+        return self._links
 
     def delLinks (self, links):
-        """Stops the link from broadcasting to the specified link(s)"""
-        if isinstance(links, list):
-            self._links[:] = [t for t in self._links if t not in links]
-        elif isinstance(links, str):
-            self._links[:] = [t for t in self._links if t != links]
-        else:
-            raise TypeError("Links specified in invalid format (list/str only)")
+        """Stops the connection from broadcasting to the specified link(s)"""
+        if not isinstance(links, list):
+            raise TypeError("Links specified must be in a list")
+        self._links[:] = [t for t in self._links if t not in links]
             
-    def addLinks(self, links):
+    def addLinks(self, myID, links):
         """
-        Adds link(s) to broadcast to.
+        Adds connection(s) to broadcast to.
         Links can be a string or a list of strings identifying connections
         """
-        if isinstance(links, list):
-            for x in links:
-                #not already added and valid link
-                if x not in self._links and (x in self._program.connections):
-                    self._links.append(x)
-                else:
-                    logger.warning("Link {} not added (already added or invalid)".format(x))
-        #single link, check already added and valid
-        elif isinstance(links, str):
-            if links not in self._links and (x in self._program.connections):
-                self._links.append(links)
+        if not isinstance(links, list):
+            raise TypeError("Links specified must be in a list")
+        for x in links:
+            #not already added and valid link
+            if x != myID and x not in self._links and (x in self._program.connections):
+                self._links.append(x)
             else:
-                logger.warning ("Link {} not added (already added or invalid)".format(x))
-        else:
-            raise TypeError("Links specified in invalid format (list/str only)")
+                logger.warning("Link {} not added (already added or invalid)".format(x))
 
     def getUserPerm (self, nick, perm):
         """Check permissions on the user"""
-        temp = self.staticUsers.getAttr(nick, perm)
+        temp = self.static_users.getAttr(nick, perm)
         #set to true or (unset and (not looking at OP attribute or are and they have control) and dynamicly assigned permission)
         return temp == UserData.YES or (temp == UserData.UNSET and
                                        (perm != UserData.CTRL or self.opControl) and
-                                       self._dynamicUsers.getAttr(nick, perm) == UserData.YES)
+                                       self._dynamic_users.getAttr(nick, perm) == UserData.YES)
 
     def _broadcastMessage(self, nick, text, fmt):
         """
@@ -132,6 +144,10 @@ class Link(threading.Thread):
         """Override join to close all connections and wait until the thread terminates"""
         #TODO: disconnecting and closing connections
         super(Link, self).join(timeout)
+
+    #set property
+    links = property(_getLinks, _setLinks)
+    connection_state = property(_getConState)
 
 ##################################################################################################
 class DC (Link):
@@ -274,9 +290,9 @@ class IRC (Link):
         
         super(IRC, self).__init__(program, server, nick, passwd, prefix, links, autoConnect, autoReconnect, mcRate, pmRate, opControl, users)
 
-        self.identText = identText
+        self.ident_text = identText
         self.channels = channels
-        self.connectCmds = connectCmds
+        self.connect_cmds = connectCmds
 
         #formatting constants
         self._mcFormat = "PRIVMSG {0} :{1}\r\n" #channel(s)/msg
