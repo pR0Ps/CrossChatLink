@@ -248,7 +248,13 @@ class CrossChatLink(threading.Thread):
             else:
                 cmd[1] = cmd[1].lower()
                 if cmd[1] in self.connections:
-                    return "TODO: Detailed status for '{}' connection".format(cmd[1])
+                    con_obj = self.connections[cmd[1]]
+                    con_type = "IRC" if type(con_obj) == links.IRC else ("NMDC" if type(con_obj) == links.NMDC else "ADC")
+                    return "Status for {} connection '{}':\n\n".format(con_type, cmd[1]) + \
+                        "Server: {}\nNick: {}\nPassword: {}\nPrefix: {}\n".format(con_obj.server, con_obj.nick, con_obj.passwd, con_obj.prefix) + \
+                        "Connect on startup: {}\nAuto reconnect: {}\nPost rate (main): {}\nPost rate (private): {}\n".format(con_obj.auto_connect, con_obj.auto_reconnect, con_obj.mc_rate, con_obj.pm_rate) + \
+                        ("Channels to join: {}\nIdent text: {}\nConnect command(s):\n{}".format(con_obj.channels, con_obj.ident_text, con_obj.connect_cmds) if con_type == "IRC" \
+                        else "Reported share: {}\nReported slots: {}\nReported client: {}".format(con_obj.share, con_obj.slots, con_obj.client))
                 else:
                     return "ERROR: No connection named '{}'".format(cmd[1])
 

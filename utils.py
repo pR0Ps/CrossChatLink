@@ -112,7 +112,7 @@ def escape_replace(msg, esc_char, esc_data):
                 i += len(esc) + 1
                 break
         else: #yes, this is a for-else construct, no, it isn't indented improperly
-            #didn't find anything, just take the escChar as literal
+            #didn't find anything, just take the esc_char as literal
             temp.append(msg[i])
             i += 1
     return "".join(temp)

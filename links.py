@@ -284,13 +284,13 @@ class ADC (DC):
 ##################################################################################################
 class IRC (Link):
 
-    def __init__(self, program, server, nick, passwd, prefix, links = [], identText = "CrossChatLink", channels = "", connect_cmds = [], auto_connect = True, auto_reconnect = True,
+    def __init__(self, program, server, nick, passwd, prefix, links = [], ident_text = "CrossChatLink", channels = "", connect_cmds = [], auto_connect = True, auto_reconnect = True,
                  mc_rate = 0, pm_rate = 0, op_control = True, users = None):
         logging.debug("Configuring a new IRC link")
         
         super(IRC, self).__init__(program, server, nick, passwd, prefix, links, auto_connect, auto_reconnect, mc_rate, pm_rate, op_control, users)
 
-        self.ident_text = identText
+        self.ident_text = ident_text
         self.channels = channels
         self.connect_cmds = connect_cmds
 

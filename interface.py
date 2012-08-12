@@ -14,7 +14,7 @@ def on_connect(client):
     logging.info("Client connected from {}".format(client.addrport()))
     _admin_client = client
     _admin_client.send("Welcome to the CrossChatLink admin interface!"
-                         "\n\nType 'help' or '?' for a list of commands\n\n")
+                         "\n\nType 'help' for a list of commands\n\n")
 def on_disconnect(client):
     global _admin_client
     logging.info ("Client disconnected")
