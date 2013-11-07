@@ -14,8 +14,7 @@ More details to come as the program gets fleshed out.
 Support
 -------
 
-* pR0Ps.CM[AT]gmail[DOT]com (comments, problems and feature requests welcome)
-* Additionally, you can use the issue tracker on the project page
+* Use the issue tracker on the project page
  
 Licensing
 ---------
